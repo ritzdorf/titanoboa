@@ -7,6 +7,7 @@ from vyper.ast.utils import parse_to_ast
 from vyper.codegen.core import anchor_opt_level
 from vyper.codegen.function_definitions import generate_ir_for_function
 from vyper.codegen.ir_node import IRnode
+from vyper.compiler.settings import OptimizationLevel
 from vyper.evm.opcodes import anchor_evm_version
 from vyper.exceptions import InvalidType
 from vyper.ir import compile_ir, optimizer
@@ -23,7 +24,7 @@ def anchor_compiler_settings(compiler_data):
         yield
 
 
-def compile_vyper_function(vyper_function, contract):
+def compile_vyper_function(vyper_function, contract, optimize=OptimizationLevel.GAS):
     """Compiles a vyper function and appends it to the top of the IR of a
     contract. This is useful for vyper `eval` and internal functions, where
     the runtime bytecode must be changed to add more runtime functionality
@@ -64,7 +65,7 @@ def compile_vyper_function(vyper_function, contract):
         ir = IRnode.from_list(["seq", ir, contract_runtime])
         ir = optimizer.optimize(ir)
 
-        assembly = compile_ir.compile_to_assembly(ir)
+        assembly = compile_ir.compile_to_assembly(ir, copy=False, optimize=optimize)
         bytecode, source_map = compile_ir.assembly_to_evm(assembly)
         bytecode += contract.data_section
         typ = func_t.return_type
@@ -110,7 +111,9 @@ def generate_bytecode_for_internal_fn(fn):
             {fn_call}
     """
     )
-    return compile_vyper_function(wrapper_code, contract)
+    return compile_vyper_function(
+        wrapper_code, contract, optimize=OptimizationLevel.NONE
+    )
 
 
 def generate_bytecode_for_arbitrary_stmt(source_code, contract):
@@ -141,4 +144,6 @@ def generate_bytecode_for_arbitrary_stmt(source_code, contract):
             {debug_body}
     """
     )
-    return compile_vyper_function(wrapper_code, contract)
+    return compile_vyper_function(
+        wrapper_code, contract, optimize=OptimizationLevel.NONE
+    )
