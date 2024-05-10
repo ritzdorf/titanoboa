@@ -394,6 +394,8 @@ class Env:
         self._cached_line_profiles = {}
         self._coverage_data = {}
 
+        self._new_contracts = []
+
         self._gas_tracker = 0
 
         self.sha3_trace = {}
@@ -511,6 +513,15 @@ class Env:
         # create_minimal_proxy_to and create_copy_of
         bytecode = self.vm.state.get_code(addr)
         self._code_registry[bytecode] = obj
+        self._new_contracts.append(addr)
+
+    def unregister_contract(self, addr):
+        if addr in self._contracts:
+            del self._contracts[addr]
+
+        bytecode = self.vm.state.get_code(addr)
+        if bytecode in self._code_registry:
+            del self._code_registry[bytecode]
 
     def register_blueprint(self, bytecode, obj):
         self._code_registry[bytecode] = obj
@@ -545,10 +556,14 @@ class Env:
     @contextlib.contextmanager
     def anchor(self):
         snapshot_id = self.vm.state.snapshot()
+        # Count new contracts from here
+        self._new_contracts = []
         try:
             with self.vm.patch.anchor():
                 yield
         finally:
+            for c in self._new_contracts:
+                self.unregister_contract(c)
             self.vm.state.revert(snapshot_id)
 
     @contextlib.contextmanager
